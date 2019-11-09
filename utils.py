@@ -13,7 +13,7 @@ from rasterio.io import DatasetWriter
 PatchSize = Union[int, Tuple[int], Tuple[int, int]]
 ClipExtremes = Union[int, Tuple[int, int]]
 
-class RestType(Enum):
+class PatchResidue(Enum):
   IGNORE = 'ignore'
   OVERLAP = 'overlap'
 
@@ -125,11 +125,13 @@ def get_confusion_matrix(predictions, labels):
 
 def fetch_images(
     path: str,
-    filter: List[str] = ('*.tif', '*.tiff'),
+    patch_size: PatchSize,
     bands: List[int] = (1, 2, 3),
+    filter: List[str] = ('*.tif', '*.tiff'),
     as_image: bool = True
 ):
-    tiles = []
+    patch_width, patch_height = normalize_patch_size(patch_size)
+    tiles = np.zeros(shape=(0, patch_width, patch_height, len(bands)))
     files = get_filtered_files(path, filter)
 
     if len(files) == 0:
@@ -141,19 +143,22 @@ def fetch_images(
         with rio.open(filename, 'r+') as img_src:
             img = img_src.read(indexes=bands)
 
-        if np.ndim(img) == 2:
+            print(img.shape)
+            if np.ndim(img) == 2:
+                img = np.expand_dims(img, axis=0)
+
+            if as_image:
+                # an array in shape (width, height, bands)
+                img = reshape_as_image(img)
+            print(img.shape)
+
             img = np.expand_dims(img, axis=0)
-
-        if as_image:
-            # reshape to (width, height, bands)
-            img = reshape_as_image(img)
-
-        tiles.append(img)
+            np.concatenate((tiles, img), axis=0)
 
     return tiles
 
 
-def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, rest='overlap'):
+def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_residue: PatchResidue='overlap'):
     img_width, img_height = image_size
     patch_width, path_height = normalize_patch_size(patch_size)
 
@@ -178,7 +183,7 @@ def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, rest='
     )
 
 
-def get_patch_windows(img: DatasetWriter, patch_size: PatchSize, rest: RestType = None) -> Iterator:
+def get_patch_windows(img: DatasetWriter, patch_size: PatchSize, rest: PatchResidue = None) -> Iterator:
     offsets = get_patch_offsets(
         (img.meta['width'], img.meta['height']), patch_size, rest)
     patch_width, path_height = normalize_patch_size(patch_size)
