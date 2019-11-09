@@ -105,8 +105,9 @@ if __name__ == '__main__':
                         'Default: False')
     parser.add_argument('--filter', type=str, nargs='*', default=('*.tif', '*.tiff'),
                         help='Glob patterns to filter files to be processed.')
-    parser.add_argument('--patch-residue', type=str, choices=('overlap', 'ignore'), default='ignore',
-                        help='What to do when there are no cropped areas of the image.')
+    parser.add_argument('--patch-residue', type=str, choices=('overlap', 'ignore'), default='overlap',
+                        help='What to do when there are no cropped areas of the image.'
+                        'Default: overlap')
 
     args = parser.parse_args()
 

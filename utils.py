@@ -158,7 +158,7 @@ def fetch_images(
     return tiles
 
 
-def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_residue: PatchResidue='overlap'):
+def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_residue: PatchResidue):
     img_width, img_height = image_size
     patch_width, path_height = normalize_patch_size(patch_size)
 
@@ -166,16 +166,20 @@ def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_
     row_offs = np.array(range(0, img_height, path_height))
 
     if patch_width * len(col_offs) != img_width:
-        if rest == 'overlap':
+        if patch_residue == PatchResidue.OVERLAP:
             col_offs[-1] = img_width - patch_width
-        elif rest is None:
+        elif patch_residue is PatchResidue.IGNORE:
             col_offs = col_offs[:-1]
+        else:
+            pass
 
     if path_height * len(row_offs) != img_height:
-        if rest == 'overlap':
+        if patch_residue == PatchResidue.OVERLAP:
             row_offs[-1] = img_height - path_height
-        elif rest is None:
+        elif patch_residue is PatchResidue.IGNORE:
             row_offs = col_offs[:-1]
+        else:
+            pass
 
     return product(
         col_offs,
