@@ -166,17 +166,17 @@ def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_
     row_offs = np.array(range(0, img_height, path_height))
 
     if patch_width * len(col_offs) != img_width:
-        if patch_residue == PatchResidue.OVERLAP:
+        if patch_residue == 'overlap':
             col_offs[-1] = img_width - patch_width
-        elif patch_residue is PatchResidue.IGNORE:
+        elif patch_residue == 'ignore':
             col_offs = col_offs[:-1]
         else:
             pass
 
     if path_height * len(row_offs) != img_height:
-        if patch_residue == PatchResidue.OVERLAP:
+        if patch_residue == 'overlap':
             row_offs[-1] = img_height - path_height
-        elif patch_residue is PatchResidue.IGNORE:
+        elif patch_residue == 'ignore':
             row_offs = col_offs[:-1]
         else:
             pass
