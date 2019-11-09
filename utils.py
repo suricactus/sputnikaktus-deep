@@ -131,29 +131,29 @@ def fetch_images(
     as_image: bool = True
 ):
     patch_width, patch_height = normalize_patch_size(patch_size)
-    tiles = np.zeros(shape=(0, patch_width, patch_height, len(bands)))
     files = get_filtered_files(path, filter)
 
     if len(files) == 0:
         print('no files match the provided filter "{}", exiting...'.format(str(filter)))
         exit(1)
 
-    for filename in files:
+    # build the final result with the proper shape, so to prevent wasteful memory copies
+    tiles = np.zeros(shape=(len(files), patch_width, patch_height, len(bands)))
+
+    for index, filename in enumerate(files):
         img_src: DatasetWriter
         with rio.open(filename, 'r+') as img_src:
             img = img_src.read(indexes=bands)
 
-            print(img.shape)
             if np.ndim(img) == 2:
                 img = np.expand_dims(img, axis=0)
 
             if as_image:
                 # an array in shape (width, height, bands)
                 img = reshape_as_image(img)
-            print(img.shape)
 
             img = np.expand_dims(img, axis=0)
-            np.concatenate((tiles, img), axis=0)
+            tiles[index] = img
 
     return tiles
 

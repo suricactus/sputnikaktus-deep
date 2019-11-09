@@ -9,52 +9,10 @@ import json
 import numpy as np
 import rasterio as rio
 from rasterio.io import DatasetWriter
-# from tensorflow.keras.optimizers import SGD
-from utils import (PatchSize, normalize_patch_size, get_filtered_files, to_categorical_4d)
-# from model.model import Deeplabv3
+from tensorflow.keras.optimizers import SGD
+from utils import (PatchSize, normalize_patch_size, to_categorical_4d, fetch_images)
+from model.model import Deeplabv3
 
-def gridwise_sample(imgarray, patchsize):
-    nrows, ncols, nbands = imgarray.shape
-    patchsamples = np.zeros(shape=(0, patchsize, patchsize, nbands),
-                            dtype=imgarray.dtype)
-
-    for i in range(int(nrows/patchsize)):
-        for j in range(int(ncols/patchsize)):
-            tocat = imgarray[i*patchsize:(i+1)*patchsize,
-                             j*patchsize:(j+1)*patchsize, :]
-            tocat = np.expand_dims(tocat, axis=0)
-            patchsamples = np.concatenate((patchsamples, tocat),
-                                          axis=0)
-    return patchsamples
-
-def fetch_images(
-    path: str, 
-    filter: List[str] = ('*.tif', '*.tiff'), 
-    bands: List[int] = (1, 2, 3),
-    should_stack: bool = True
-  ):
-  tiles = []
-  files = get_filtered_files(path, filter)
-  
-  if len(files) == 0:
-    print('no files match the provided filter "{}", exiting...'.format(str(filter)))
-    exit(1)
-
-  for filename in files:
-    img_src: DatasetWriter
-    with rio.open(filename, 'r+') as img_src:
-      img = img_src.read(indexes=bands)
-
-      if np.ndim(img) == 2:
-        img = np.expand_dims(img, axis=0)
-
-      if should_stack:
-        # an array in shape (width, height, bands)
-        img = np.stack(img, axis=2)
-
-      tiles.append(img)
-
-  return tiles
 
 def train_model(
     images_path: str,
@@ -90,8 +48,8 @@ def train_model(
   # if verbose:
   #   print(model.summary())
 
-  images = fetch_images(images_path, bands=bands)
-  labels = fetch_images(labels_path, bands=(1))
+  images = fetch_images(images_path, tile_size, bands=bands)
+  labels = fetch_images(labels_path, tile_size, bands=(1,))
 
   print(images.shape)
 
