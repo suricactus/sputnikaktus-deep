@@ -88,18 +88,19 @@ def train_model(
   #     verbose=2,
   # )
 
-  # dt = datetime.now().isoformat()
-  # weights_filename = 'model_{}.h5'.format(dt)
-  # history_filename = 'history_{}.json'.format(dt)
+    name = None
+    name = name if name else datetime.now().isoformat()
+    weights_filename = os.path.join(runs, name, 'model.h5')
+    history_filename = os.path.join(runs, name, 'history.json')
 
-  # print('Saving model to "{}"...'.format(weights_filename))
+    print('Saving model to "{}"...'.format(weights_filename))
 
-  # model.save(weights_filename)
+    # model.save(weights_filename)
 
-  # print('Saving history to "{}"...'.format(history_filename))
+    print('Saving history to "{}"...'.format(history_filename))
 
-  # with open(history_filename, 'w') as history_dest:
-  #   json.dump(str(history.history), history_dest)
+    # with open(history_filename, 'w') as history_dest:
+    #   json.dump(str(history.history), history_dest)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(
