@@ -5,156 +5,139 @@ from datetime import datetime
 import argparse
 import os
 import json
+import importlib.util
+
 
 import numpy as np
 import rasterio as rio
 from rasterio.io import DatasetWriter
-from tensorflow.keras.optimizers import SGD
-from utils import (PatchSize, normalize_patch_size, to_categorical_4d, fetch_images)
-from model.model import Deeplabv3
+from utils import (PatchSize, normalize_patch_size,
+                   to_categorical_binary, fetch_images)
+# from model.model import Deeplabv3
+
+def datasets(dataset, patch_size, classes):
+    images_path, labels_path = dataset
+    images = fetch_images(images_path, patch_size, bands=bands)
+    labels = fetch_images(labels_path, patch_size, bands=(1,))
+    labels = to_categorical_binary(labels, classes)
+
+    return images, labels
 
 
 def train_model(
-    images_path: str,
-    labels_path: str,
-    # destination: str,
-    tile_size: PatchSize,
-    classes: int,
+    training: Tuple[str, str],
     bands: List[int],
+    model: str,
+    classes: int,
+    patch_size: PatchSize,
+    validation: Tuple[str, str] = None,
+    test: Tuple[str, str] = None,
     weights: str = None,
+    name: str = None,
     overwrite: bool = False,
     print_summary_only: bool = False,
-    verbose: bool = False,
     batch_size: int = None,
     epochs: int = 10,
-    learning_rate: int = 0.001
-  ):
-  tile_size = normalize_patch_size(tile_size)
-  input_shape = (*tile_size, len(bands))
-  
-  # model = Deeplabv3(
-  #     input_shape=input_shape,
-  #     classes=classes,
-  #     weights=None
-  #   )
+    learning_rate: float = 0.001,
+    momentum: float = 0.9
+):
+    model_path = model
+    patch_size = normalize_patch_size(patch_size)
+    name = name if name else datetime.now().strftime('%y%m%d_%H%M%S')
 
-  # if weights:
-  #   model.load_weights(weights)
+    assert isinstance(classes, int)
+    assert classes > 0
+    assert os.path.exists(model)
 
-  # if print_summary_only:
-  #   print(model.summary())
-  #   exit
+    spec = importlib.util.spec_from_file_location('model_module', model_path)
+    model_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(model_module)
 
-  # if verbose:
-  #   print(model.summary())
+    model = model_module.get_model(
+        patch_size,
+        bands,
+        classes,
+        learning_rate
+    )
 
-  images = fetch_images(images_path, tile_size, bands=bands)
-  labels = fetch_images(labels_path, tile_size, bands=(1,))
+    if print_summary_only:
+      print(model.summary())
+      exit(0)
 
-  print(images.shape)
+    if weights:
+        assert os.path.exists(weights)
 
-  # optimizer = SGD(lr=learning_rate, momentum=0.9)
-  # model.compile(
-  #     loss='binary_crossentropy',
-  #     metrics=['accuracy'], 
-  #     optimizer=optimizer)
+        model.load_weights(weights)
 
-  # images_train = np.zeros(shape=(0, tile_size[0], tile_size[1], len(bands)))
-  # labels_train = np.zeros(shape=(0, tile_size[0], tile_size[1], 1))
+    images_path_training, labels_path_training = training
+    images_training = fetch_images(images_path_training, patch_size, bands=bands)
+    labels_training = fetch_images(labels_path_training, patch_size, bands=(1,))
+    labels_training = to_categorical_binary(labels_training, classes)
 
-  # for image in images:
-  #   if image.shape[0] == tile_size[0] and image.shape[1] == tile_size[1]:
-  #     image_tmp = np.expand_dims(image, axis=0)
-  #     images_train = np.concatenate((images_train, image_tmp), axis=0)
-  #   else:
-  #     raise Exception('Not implemented yet')
+    print('train and labels', images_training.shape, labels_training.shape)
 
-  # for image in labels:
-  #   if image.shape[0] == tile_size[0] and image.shape[1] == tile_size[1]:
-  #     image_tmp = np.expand_dims(image, axis=0)
-  #     labels_train = np.concatenate((labels_train, image_tmp), axis=0)
-  #   else:
-  #     raise Exception('Not implemented yet')
-      
-  # labels_train = to_categorical_4d(labels_train, classes)
-    
-  # print('train and labels', images_train.shape, labels_train.shape)
-  
-  # history = model.fit(
-  #     x=images_train,
-  #     y=labels_train,
-  #     epochs=epochs,
-  #     batch_size=batch_size,
-  #     verbose=2,
-  # )
+    # history = model.fit(
+    #     x=images_training,
+    #     y=labels_training,
+    #     epochs=epochs,
+    #     batch_size=batch_size,
+    #     verbose=2,
+    # )
 
-    name = None
-    name = name if name else datetime.now().isoformat()
-    weights_filename = os.path.join(runs, name, 'model.h5')
-    history_filename = os.path.join(runs, name, 'history.json')
+    weights_filename = os.path.join('experiment', name, 'model.h5')
+    history_filename = os.path.join('experiment', name, 'history.json')
 
     print('Saving model to "{}"...'.format(weights_filename))
 
-    # model.save(weights_filename)
+    model.save(weights_filename)
 
     print('Saving history to "{}"...'.format(history_filename))
 
-    # with open(history_filename, 'w') as history_dest:
-    #   json.dump(str(history.history), history_dest)
+    with open(history_filename, 'w') as history_dest:
+      json.dump(history.history, history_dest)
+
 
 if __name__ == '__main__':
-  parser = argparse.ArgumentParser(
-      description='A tool to train deeplab v3+ model',
-      epilog='A tool to train deeplab v3+ model'
-  )
-  parser.add_argument('-i', '--images', type=str, required=True,
-                      help='Existing directory where the images reside')
-  parser.add_argument('-l', '--labels', type=str, required=True,
-                      help='Existing directory where the labeled images reside')
-  # parser.add_argument('-d', '--destination', type=str, required=True,
-  #                     help='Directory where classfied images will be output')
-  parser.add_argument('-t', '--tile-size', type=int, nargs='+', required=True,
-                      metavar='width height bands',
-                      help='Size of the output input tensor.')
-  parser.add_argument('--batch-size', type=int,
-                      help='Batch size')
-  parser.add_argument('--epochs', type=int, default=10,
-                      help='Number of epochs'
+    parser = argparse.ArgumentParser(
+        description='A tool to train deeplab v3+ model',
+        epilog='A tool to train deeplab v3+ model'
+    )
+    parser.add_argument('--training', type=str, nargs=2, required=True,
+                        help='Existing directory where the train images and labels reside')
+    parser.add_argument('--validation', type=str, nargs=2,
+                        help='Existing directory where the validate images and labels reside')
+    parser.add_argument('--test', type=str, nargs=2,
+                        help='Existing directory where the test images and labels reside')
+    parser.add_argument('--name', type=str,
+                        help='Directory where classfied images will be output. '
+                        'If not provided, it is going to use the YYMMDD_HHMMSS format')
+    parser.add_argument('--weights', type=str,
+                        help='Pretrained weights to be used.')
+    parser.add_argument('--model', type=str,
+                        help='Model to be used.')
+    parser.add_argument('--patch-size', type=int, nargs='+', required=True,
+                        metavar='width height bands',
+                        help='Size of the output input tensor.')
+    parser.add_argument('--epochs', type=int, default=10,
+                        help='Number of epochs'
                         'Default: 10')
-  parser.add_argument('-b', '--bands', type=int, nargs='+', default=(1, 2, 3),
-                      help='Bands to be be used to train the input.'
+    parser.add_argument('--batch-size', type=int,
+                        help='Batch size')
+    parser.add_argument('--bands', type=int, nargs='+', default=(1, 2, 3),
+                        help='Bands to be be used.'
                         'Default: (1, 2, 3)')
-  parser.add_argument('-c', '--classes', type=int, required=True,
-                      help='Number of output classes.')
-  parser.add_argument('-w', '--weights', type=str,
-                      help='Pretrained weights to be used.')
-  parser.add_argument('--overwrite', action='store_true',
-                      help='Delete the whole destination path and then recreate it.'
+    parser.add_argument('-c', '--classes', type=int, required=True,
+                        help='Number of output classes.')
+    parser.add_argument('--overwrite', action='store_true',
+                        help='Delete the whole destination path and then recreate it.'
                         'Default: False')
-  parser.add_argument('--verbose', action='store_true',
-                      help='High verbosity.'
+    parser.add_argument('--print-summary-only', action='store_true',
+                        help='Print model summary and exit.'
                         'Default: False')
-  parser.add_argument('--print-summary-only', action='store_true',
-                      help='Print model summary and exit.'
-                        'Default: False')
-  parser.add_argument('--learning-rate', type=float, default=0.001,
-                      help='Learning rate for the network'
+    parser.add_argument('--learning-rate', type=float, default=0.001,
+                        help='Learning rate for the network'
                         'Default: 0.001')
 
-  args = parser.parse_args()
+    args = parser.parse_args()
 
-  train_model(
-      images_path=args.images,
-      labels_path=args.labels,
-      # destination=args.destination,
-      tile_size=args.tile_size,
-      classes=args.classes,
-      bands=args.bands,
-      weights=args.weights,
-      overwrite=args.overwrite,
-      print_summary_only=args.print_summary_only,
-      verbose=args.verbose,
-      epochs=args.epochs,
-      batch_size=args.batch_size,
-      learning_rate=args.learning_rate
-  )
+    train_model(**vars(args))

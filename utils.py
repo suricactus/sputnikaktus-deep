@@ -4,8 +4,10 @@ from glob import glob
 from itertools import product
 from enum import Enum
 
+
 import numpy as np
 import rasterio as rio
+from deprecated import deprecated
 from rasterio import (windows)
 from rasterio.plot import (reshape_as_image)
 from rasterio.io import DatasetWriter
@@ -75,14 +77,23 @@ def get_filtered_files(
     return sorted(files)
 
 
-def to_categorical_4d(images, classes):
-    Y = np.zeros((
-        images.shape[0],
-        images.shape[1],
-        images.shape[2],
-        classes
-    ), dtype=np.int32)
+# TODO check if keras to_categorical can do the job
+def to_categorical_binary(images, classes):
+    # TODO this is binary only :(
+    class_values = np.where(images != 0, 1, 0)
+    # (0, 1, 0, 1, 0, 0) -> ((1, 0), (0, 1), (1, 0), (0, 1), (1, 0), (1, 0))
+    with_categorical = np.eye(classes, dtype=int)[class_values]
+    # (n, w, h, 1, c) -> (n, w, h, c)
+    categorical_labels = np.squeeze(with_categorical)
 
+    return categorical_labels
+
+
+@deprecated('Please use to_categorical_binary')
+def to_categorical_4d(images, classes):
+    (num_samples, img_w, img_h, _) = images.shape
+    # a = categorical_labels
+    Y = np.zeros((num_samples, img_w, img_h, classes), dtype=int)
     for h in range(images.shape[0]):
         for i in range(images.shape[1]):
             for j in range(images.shape[2]):
@@ -91,15 +102,15 @@ def to_categorical_4d(images, classes):
                 else:
                     continue
 
+    # for h in range(images.shape[0]):
+    #     for i in range(images.shape[1]):
+    #         for j in range(images.shape[2]):
+    #             if (Y[h, i, j, 0] != a[h, i, j, 0] or Y[h, i, j, 1] != a[h, i, j, 1]):
+    #                 print(h, i, j, images[h, i, j, 0], Y[h, i, j, 0], Y[h, i, j, 1], a[h, i, j, 0], a[h, i, j, 1])
+
+    print(np.array_equal(a, Y))
+
     return Y
-
-
-def extract_dt(filename: str) -> str:
-    basename_ext = os.path.basename(filename)
-    basename, _ = os.path.splitext(basename_ext)
-    _, dt = basename.split('_')
-
-    return dt
 
 
 def get_confusion_matrix(predictions, labels):
@@ -159,23 +170,23 @@ def fetch_images(
 
 
 def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_residue: PatchResidue):
-    img_width, img_height = image_size
+    img_w, img_h = image_size
     patch_width, path_height = normalize_patch_size(patch_size)
 
-    col_offs = np.array(range(0, img_width, patch_width))
-    row_offs = np.array(range(0, img_height, path_height))
+    col_offs = np.array(range(0, img_w, patch_width))
+    row_offs = np.array(range(0, img_h, path_height))
 
-    if patch_width * len(col_offs) != img_width:
+    if patch_width * len(col_offs) != img_w:
         if patch_residue == 'overlap':
-            col_offs[-1] = img_width - patch_width
+            col_offs[-1] = img_w - patch_width
         elif patch_residue == 'ignore':
             col_offs = col_offs[:-1]
         else:
             pass
 
-    if path_height * len(row_offs) != img_height:
+    if path_height * len(row_offs) != img_h:
         if patch_residue == 'overlap':
-            row_offs[-1] = img_height - path_height
+            row_offs[-1] = img_h - path_height
         elif patch_residue == 'ignore':
             row_offs = col_offs[:-1]
         else:
