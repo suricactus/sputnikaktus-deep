@@ -89,12 +89,12 @@ def train_model(
 
     print('Saving model to "{}"...'.format(weights_filename))
 
-    model.save(weights_filename)
+    # model.save(weights_filename)
 
     print('Saving history to "{}"...'.format(history_filename))
 
-    with open(history_filename, 'w') as history_dest:
-      json.dump(history.history, history_dest)
+    # with open(history_filename, 'w') as history_dest:
+    #   json.dump(history.history, history_dest)
 
 
 if __name__ == '__main__':
@@ -113,7 +113,7 @@ if __name__ == '__main__':
                         'If not provided, it is going to use the YYMMDD_HHMMSS format')
     parser.add_argument('--weights', type=str,
                         help='Pretrained weights to be used.')
-    parser.add_argument('--model', type=str,
+    parser.add_argument('--model', type=str, required=True,
                         help='Model to be used.')
     parser.add_argument('--patch-size', type=int, nargs='+', required=True,
                         metavar='width height bands',

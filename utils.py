@@ -139,7 +139,8 @@ def fetch_images(
     patch_size: PatchSize,
     bands: List[int] = (1, 2, 3),
     filter: List[str] = ('*.tif', '*.tiff'),
-    as_image: bool = True
+    as_image: bool = True,
+    patch_residue: str = None
 ):
     patch_width, patch_height = normalize_patch_size(patch_size)
     files = get_filtered_files(path, filter)
@@ -148,47 +149,61 @@ def fetch_images(
         print('no files match the provided filter "{}", exiting...'.format(str(filter)))
         exit(1)
 
-    # build the final result with the proper shape, so to prevent wasteful memory copies
-    tiles = np.zeros(shape=(len(files), patch_width, patch_height, len(bands)))
+    patches_count = 0
 
-    for index, filename in enumerate(files):
+    for filename in files:
         img_src: DatasetWriter
-        with rio.open(filename, 'r+') as img_src:
-            img = img_src.read(indexes=bands)
+        with rio.open(filename, 'r') as img_src:
+            offsets = get_patch_offsets(
+                (img_src.meta['width'], img_src.meta['height']), patch_size, patch_residue)
 
-            if np.ndim(img) == 2:
+            patches_count += len(list(offsets))
+
+    # build the final result with the proper shape, so to prevent wasteful memory copies
+    tiles = np.zeros(
+        shape=(patches_count, patch_width, patch_height, len(bands)))
+    index = 0
+
+    for filename in files:
+        img_src: DatasetWriter
+        with rio.open(filename, 'r') as img_src:
+            for window, transform in get_patch_windows(img_src, patch_size, patch_residue):
+                img = img_src.read(indexes=bands, window=window)
+
+                if np.ndim(img) == 2:
+                    img = np.expand_dims(img, axis=0)
+
+                if as_image:
+                    # an array in shape (width, height, bands)
+                    img = reshape_as_image(img)
+
                 img = np.expand_dims(img, axis=0)
-
-            if as_image:
-                # an array in shape (width, height, bands)
-                img = reshape_as_image(img)
-
-            img = np.expand_dims(img, axis=0)
-            tiles[index] = img
+                tiles[index] = img
+                index += 1
 
     return tiles
 
 
 def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_residue: PatchResidue):
     img_w, img_h = image_size
-    patch_width, path_height = normalize_patch_size(patch_size)
+    patch_width, patch_height = normalize_patch_size(patch_size)
 
     col_offs = np.array(range(0, img_w, patch_width))
-    row_offs = np.array(range(0, img_h, path_height))
+    row_offs = np.array(range(0, img_h, patch_height))
 
     if patch_width * len(col_offs) != img_w:
-        if patch_residue == 'overlap':
-            col_offs[-1] = img_w - patch_width
-        elif patch_residue == 'ignore':
+        if patch_residue is None or patch_residue == 'ignore':
             col_offs = col_offs[:-1]
+        elif patch_residue == 'overlap':
+            col_offs[-1] = img_w - patch_width
         else:
             pass
 
-    if path_height * len(row_offs) != img_h:
-        if patch_residue == 'overlap':
-            row_offs[-1] = img_h - path_height
-        elif patch_residue == 'ignore':
+    if patch_height * len(row_offs) != img_h:
+        if patch_residue is None or patch_residue == 'ignore':
             row_offs = col_offs[:-1]
+        elif patch_residue == 'overlap':
+            row_offs[-1] = img_h - patch_height
         else:
             pass
 
@@ -198,9 +213,9 @@ def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_
     )
 
 
-def get_patch_windows(img: DatasetWriter, patch_size: PatchSize, rest: PatchResidue = None) -> Iterator:
+def get_patch_windows(img: DatasetWriter, patch_size: PatchSize, patch_residue: PatchResidue = None) -> Iterator:
     offsets = get_patch_offsets(
-        (img.meta['width'], img.meta['height']), patch_size, rest)
+        (img.meta['width'], img.meta['height']), patch_size, patch_residue)
     patch_width, path_height = normalize_patch_size(patch_size)
 
     big_window = windows.Window(
