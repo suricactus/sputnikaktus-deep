@@ -40,7 +40,7 @@ def train_model(
     batch_size: int = None,
     epochs: int = 10,
     learning_rate: float = 0.001,
-    momentum: float = 0.9
+    interactive: bool = False
 ):
     model_path = model
     patch_size = normalize_patch_size(patch_size)
@@ -74,12 +74,13 @@ def train_model(
     images_training = fetch_images(images_path_training, patch_size, bands=bands)
     labels_training = fetch_images(labels_path_training, patch_size, bands=(1,))
 
-    visualize_pairs(
-        images_training,
-        labels_training, 
-        legend=('background', 'building'),
-        index=0
-    )
+    if interactive:
+        visualize_pairs(
+            images_training,
+            labels_training, 
+            legend=('background', 'building'),
+            index=0
+        )
 
     labels_training = to_categorical_binary(labels_training, classes)
 
@@ -143,6 +144,9 @@ if __name__ == '__main__':
                         help='Number of output classes.')
     parser.add_argument('--overwrite', action='store_true',
                         help='Delete the whole destination path and then recreate it.'
+                        'Default: False')
+    parser.add_argument('--interactive', action='store_true',
+                        help='Show plots and make the whole process interactive.'
                         'Default: False')
     parser.add_argument('--print-summary-only', action='store_true',
                         help='Print model summary and exit.'
