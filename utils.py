@@ -1,3 +1,4 @@
+import json
 from typing import (Union, Tuple, List, Iterable, Iterator)
 import os
 from glob import glob
@@ -11,18 +12,20 @@ from deprecated import deprecated
 from rasterio import (windows)
 from rasterio.plot import (reshape_as_image)
 from rasterio.io import DatasetWriter
+from skimage import exposure
 
 PatchSize = Union[int, Tuple[int], Tuple[int, int]]
 ClipExtremes = Union[int, Tuple[int, int]]
 
+
 class PatchResidue(Enum):
-  IGNORE = 'ignore'
-  OVERLAP = 'overlap'
+    IGNORE = 'ignore'
+    OVERLAP = 'overlap'
 
 
-def hist_stretch(img, bands: Iterable = None, clip_extremes: ClipExtremes = (0, 100)):
+def hist_stretch_raster(img, bands: Iterable = None, clip_extremes: ClipExtremes = (2.5, 97.5)):
     """General purpose histogram stretching."""
-    total_bands, *dimensions = img.shape
+    total_bands, *_dimensions = img.shape
 
     if bands is None:
         bands = range(1, total_bands)
@@ -41,6 +44,29 @@ def hist_stretch(img, bands: Iterable = None, clip_extremes: ClipExtremes = (0, 
         stretched.append(img_rescale)
 
     return np.array(stretched)
+
+
+def hist_stretch_image(img, bands: Iterable = None, clip_extremes: ClipExtremes = (2.5, 97.5)):
+    """General purpose histogram stretching."""
+    _, _, total_bands = img.shape
+
+    if bands is None:
+        bands = range(0, total_bands)
+
+    stretched = np.copy(img)
+
+    if isinstance(clip_extremes, int):
+        clip_extremes = (0 + clip_extremes, 100 - clip_extremes)
+
+    for index, band in enumerate(bands):
+        arr = img[:, :, band]
+        percentile_min, percentile_max = np.percentile(arr, clip_extremes)
+        band_stretched = exposure.rescale_intensity(
+            arr, in_range=(percentile_min, percentile_max))
+
+        stretched[:, :, index] = band_stretched
+
+    return stretched
 
 
 def normalize_patch_size(patch_size: PatchSize) -> Tuple[int, int]:
@@ -234,3 +260,15 @@ def get_patch_windows(img: DatasetWriter, patch_size: PatchSize, patch_residue: 
 
         transform = windows.transform(window, img.transform)
         yield window, transform
+
+# got it from https://stackoverflow.com/a/57915246
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(NpEncoder, self).default(obj)

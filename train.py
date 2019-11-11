@@ -11,9 +11,10 @@ import importlib.util
 import numpy as np
 import rasterio as rio
 from rasterio.io import DatasetWriter
-from utils import (PatchSize, normalize_patch_size,
+from utils import (PatchSize, NpEncoder, normalize_patch_size,
                    to_categorical_binary, fetch_images)
-# from model.model import Deeplabv3
+from visualization import (visualize_pairs)
+
 
 def datasets(dataset, patch_size, classes):
     images_path, labels_path = dataset
@@ -72,29 +73,41 @@ def train_model(
     images_path_training, labels_path_training = training
     images_training = fetch_images(images_path_training, patch_size, bands=bands)
     labels_training = fetch_images(labels_path_training, patch_size, bands=(1,))
+
+    visualize_pairs(
+        images_training,
+        labels_training, 
+        legend=('background', 'building'),
+        index=0
+    )
+
     labels_training = to_categorical_binary(labels_training, classes)
 
-    print('train and labels', images_training.shape, labels_training.shape)
+    print('Train shapes for images and labels: ', images_training.shape, labels_training.shape)
 
-    # history = model.fit(
-    #     x=images_training,
-    #     y=labels_training,
-    #     epochs=epochs,
-    #     batch_size=batch_size,
-    #     verbose=2,
-    # )
+    history = model.fit(
+        x=images_training,
+        y=labels_training,
+        epochs=epochs,
+        batch_size=batch_size,
+        verbose=2,
+    )
 
     weights_filename = os.path.join('experiment', name, 'model.h5')
     history_filename = os.path.join('experiment', name, 'history.json')
 
+    os.makedirs(os.path.join('experiment', name), exist_ok=True)
+
     print('Saving model to "{}"...'.format(weights_filename))
 
-    # model.save(weights_filename)
+    model.save(weights_filename)
 
     print('Saving history to "{}"...'.format(history_filename))
 
-    # with open(history_filename, 'w') as history_dest:
-    #   json.dump(history.history, history_dest)
+    with open(history_filename, 'w') as history_dest:
+        data = vars(history)
+        del data['model']
+        json.dump(data, history_dest, cls=NpEncoder)
 
 
 if __name__ == '__main__':
