@@ -9,20 +9,9 @@ import importlib.util
 
 
 import numpy as np
-import rasterio as rio
-from rasterio.io import DatasetWriter
 from utils import (PatchSize, NpEncoder, normalize_patch_size,
                    to_categorical_binary, fetch_images)
 from visualization import (visualize_pairs)
-
-
-def datasets(dataset, patch_size, classes):
-    images_path, labels_path = dataset
-    images = fetch_images(images_path, patch_size, bands=bands)
-    labels = fetch_images(labels_path, patch_size, bands=(1,))
-    labels = to_categorical_binary(labels, classes)
-
-    return images, labels
 
 
 def train_model(
