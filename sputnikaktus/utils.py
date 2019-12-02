@@ -80,7 +80,8 @@ def normalize_patch_size(patch_size: PatchSize) -> Tuple[int, int]:
     # enforce to tuple
     patch_size = (patch_size[0], patch_size[1])
 
-    assert isinstance(patch_size, tuple) and len(patch_size) == 2, 'tile_size must be a tuple of two elements'
+    assert isinstance(patch_size, tuple) and len(
+        patch_size) == 2, 'tile_size must be a tuple of two elements'
 
     return patch_size
 
@@ -90,14 +91,18 @@ def normalize_overlap_size(overlap_size: PatchSize) -> Tuple[int, int]:
         overlap_size = (overlap_size, overlap_size, overlap_size, overlap_size)
 
     if len(overlap_size) == 1:
-        overlap_size = (overlap_size[0], overlap_size[0], overlap_size[0], overlap_size[0])
+        overlap_size = (overlap_size[0], overlap_size[0],
+                        overlap_size[0], overlap_size[0])
     elif len(overlap_size) == 2:
-        overlap_size = (overlap_size[0], overlap_size[1], overlap_size[0], overlap_size[1])
+        overlap_size = (overlap_size[0], overlap_size[1],
+                        overlap_size[0], overlap_size[1])
 
     # enforce to tuple
-    overlap_size = (overlap_size[0], overlap_size[1], overlap_size[2], overlap_size[3])
+    overlap_size = (overlap_size[0], overlap_size[1],
+                    overlap_size[2], overlap_size[3])
 
-    assert isinstance(overlap_size, tuple) and len(overlap_size) == 4, 'overlap_size must be a tuple of four elements'
+    assert isinstance(overlap_size, tuple) and len(
+        overlap_size) == 4, 'overlap_size must be a tuple of four elements'
 
     return overlap_size
 
@@ -183,7 +188,8 @@ def fetch_images(
     bands: List[int] = (1, 2, 3),
     filter: List[str] = ('*.tif', '*.tiff'),
     as_image: bool = True,
-    patch_residue: str = None
+    patch_residue: str = None,
+    out_dtype: np.dtype = np.uint8
 ):
     patch_w, patch_height = normalize_patch_size(patch_size)
     files = get_filtered_files(path, filter)
@@ -211,7 +217,8 @@ def fetch_images(
         with rio.open(filename, 'r') as img_src:
             img_size = (img_src.meta['width'], img_src.meta['height'])
             for window in get_patch_windows(img_size, patch_size, patch_residue):
-                img = img_src.read(indexes=bands, window=window)
+                img = img_src.read(
+                    indexes=bands, window=window, out_dtype=out_dtype)
 
                 if np.ndim(img) == 2:
                     img = np.expand_dims(img, axis=0)
@@ -258,7 +265,8 @@ def get_patch_offsets(image_size: Tuple[int, int], patch_size: PatchSize, patch_
 
 def get_patch_windows(img_size: ImageSize, patch_size: PatchSize, patch_residue: PatchResidue = None, img_transform=None) -> Iterator:
     img_w, img_h = img_size
-    big_window = windows.Window(col_off=0, row_off=0, width=img_w, height=img_h)
+    big_window = windows.Window(
+        col_off=0, row_off=0, width=img_w, height=img_h)
     offsets = get_patch_offsets((img_w, img_h), patch_size, patch_residue)
     patch_w, patch_h = normalize_patch_size(patch_size)
 
@@ -276,38 +284,77 @@ def get_patch_windows(img_size: ImageSize, patch_size: PatchSize, patch_residue:
         else:
             yield window
 
-def get_buffered_patch(img: DatasetWriter, bands: Iterable[int], patch_size: PatchSize, overlap_size: PatchSize, patch_residue: PatchResidue = None, pad: str = None) -> Iterator:
+def get_buffered_patch2(
+    img: DatasetWriter,
+    bands: Iterable[int],
+    patch_size: PatchSize,
+    overlap_size: PatchSize,
+    patch_residue: PatchResidue = None,
+    pad: str = None,
+    out_dtype: np.dtype = np.uint8
+) -> Iterator:
     img_w, img_h = (img.meta['width'], img.meta['height'])
-    big_window = windows.Window(col_off=0, row_off=0, width=img_w, height=img_h)    
     patch_w, patch_h = normalize_patch_size(patch_size)
     offsets = get_patch_offsets(
         (img_w, img_h), patch_size, patch_residue)
-    overlap_t, overlap_r, overlap_b, overlap_l = normalize_overlap_size(overlap_size)
+    overlap_t, overlap_r, overlap_b, overlap_l = normalize_overlap_size(
+        overlap_size)
+    big_window = windows.Window(
+        col_off=0, row_off=0, width=img_w, height=img_h)
 
-    assert patch_w >= overlap_l and patch_w >= overlap_r
-    assert patch_h >= overlap_t and patch_h >= overlap_b
+    for offset_col, offset_row in offsets:
+        # real_overlap_l = max(0, min(overlap_l, offset_col - overlap_l))
+        # real_overlap_t = max(0, min(overlap_t, offset_row - overlap_t))
 
-    for col_off, row_off in offsets:
-        window_col_off = max(0, col_off - overlap_l)
-        window_row_off = max(0, row_off - overlap_t)
-        window_w = min(img_w, patch_w  + overlap_r)
-        window_h = min(img_h, patch_h + overlap_b)
+        if overlap_l - offset_col >= 0:
+            real_overlap_l = offset_col
+        else:
+            real_overlap_l = overlap_l
+
+        if overlap_t - offset_row >= 0:
+            real_overlap_t = offset_row
+        else:
+            real_overlap_t = overlap_t
+
+        if offset_col + patch_w + overlap_r >= img_w:
+            real_overlap_r = overlap_r - (offset_col + patch_w + overlap_r - img_w)
+        else:
+            real_overlap_r = overlap_r
+
+        if offset_row + patch_h + overlap_b > img_h:
+            real_overlap_b = overlap_b - (offset_row + patch_h + overlap_b - img_h)
+        else:
+            real_overlap_b = overlap_b
+
+        window_w = min(img_w, patch_w + real_overlap_l + real_overlap_r)
+        window_h = min(img_h, patch_h + real_overlap_t + real_overlap_b)
 
         window = windows.Window(
-            col_off=col_off,
-            row_off=row_off,
+            col_off=offset_col - real_overlap_l,
+            row_off=offset_row - real_overlap_t,
             width=window_w,
             height=window_h
         ).intersection(big_window)
 
-        patch = (window_col_off - col_off, window_row_off - row_off)
+        pad_size_t = overlap_t - real_overlap_t
+        pad_size_b = overlap_b - real_overlap_b
+        pad_size_l = overlap_l - real_overlap_l
+        pad_size_r = overlap_r - real_overlap_r
 
-        print('zzz', window_col_off, window_row_off, window_w, window_h)
-        img = img.read(indexes=bands, window=window)
-        
+        img_read = img.read(indexes=bands, window=window, out_dtype=out_dtype)
+
+        padded_patch = np.pad(
+            img_read,
+            ((0, 0), (pad_size_t, pad_size_b), (pad_size_l, pad_size_r)),
+            mode='constant',
+            constant_values=0
+        )
+
+        yield reshape_as_image(padded_patch), offset_col, offset_row
+
 
 # got it from https://stackoverflow.com/a/57915246
-class NpEncoder(json.JSONEncoder):
+class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.integer):
             return int(obj)
@@ -316,4 +363,4 @@ class NpEncoder(json.JSONEncoder):
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
         else:
-            return super(NpEncoder, self).default(obj)
+            return super(NumpyEncoder, self).default(obj)

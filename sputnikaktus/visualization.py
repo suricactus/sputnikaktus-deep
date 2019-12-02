@@ -5,13 +5,13 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Subplot
 
+from rasterio.plot import (reshape_as_image)
 from skimage import exposure
 
-from utils import hist_stretch_image
+from sputnikaktus.utils import hist_stretch_image
 
 FigSplt = Tuple[Figure, Subplot]
 Legend = Iterable[str]
@@ -72,10 +72,11 @@ def visualize_label(
     fig, splt = get_fig_splt(figsplt)
 
     splt.set_title(title)
-    iplt = plt.imshow(img[:, :, 0])
+    iplt = plt.imshow(img)
 
     if legend:
-        assert len(legend) >= len(values), 'Legend items should not be less than values'
+        assert len(legend) >= len(
+            values), 'Legend items should not be less than values'
 
         # get the colors of the values, according to the colormap used by imshow
         colors = [iplt.cmap(iplt.norm(value)) for value in values]
@@ -94,12 +95,23 @@ def visualize_image(
     title: str = '',
     filename: str = None,
     rgb: Tuple[int, int, int] = (0, 1, 2),
-    figsplt: FigSplt = None
+    figsplt: FigSplt = None,
+    stretch: bool = True,
+    show: bool = False,
+    as_image: bool = False
 ):
     """Visualize the satellite image data."""
     assert len(rgb) == 3, 'Exactly three bands should be passed as rgb'
+    assert img.dtype == np.uint8 or img.dtype == np.float32, 'RGB images can be only certain types in matplotlib'
 
-    img = hist_stretch_image(img)
+    if as_image:
+        img = reshape_as_image(img)
+
+    if stretch:
+        img = hist_stretch_image(img)
+    else:
+        img = hist_stretch_image(img, clip_extremes=0)
+
 
     fig, splt = get_fig_splt(figsplt)
 
@@ -108,6 +120,9 @@ def visualize_image(
 
     if filename:
         fig.savefig(filename)
+
+    if show:
+        plt.show()
 
     return splt
 
@@ -130,7 +145,8 @@ def visualize_pair(
     visualize_image(img_raw, title=title_raw, rgb=rgb, figsplt=(fig, splt))
 
     splt = fig.add_subplot(1, 2, 2)
-    visualize_label(img_lbl, title=title_lbl, legend=legend, figsplt=(fig, splt))
+    visualize_label(img_lbl, title=title_lbl,
+                    legend=legend, figsplt=(fig, splt))
 
     if filename:
         fig.savefig(filename)
@@ -193,7 +209,7 @@ def visualize_pairs(
 
         if current != state['current']:
             visualize_pair(imgs_raw[state['current']], imgs_lbl[state['current']], legend=legend,
-                        title=title, title_raw=title_raw, title_lbl=title_lbl, figsplt=(fig, splt))
+                           title=title, title_raw=title_raw, title_lbl=title_lbl, figsplt=(fig, splt))
             fig.canvas.draw()
 
     fig, splt = get_fig_splt(False)

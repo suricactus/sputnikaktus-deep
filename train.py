@@ -9,9 +9,9 @@ import importlib.util
 
 
 import numpy as np
-from utils import (PatchSize, NpEncoder, normalize_patch_size,
+from sputnikaktus.utils import (PatchSize, NumpyEncoder, normalize_patch_size,
                    to_categorical_binary, fetch_images)
-from visualization import (visualize_pairs)
+from sputnikaktus.visualization import (visualize_pairs)
 
 
 def train_model(
@@ -97,7 +97,7 @@ def train_model(
     with open(history_filename, 'w') as history_dest:
         data = vars(history)
         del data['model']
-        json.dump(data, history_dest, cls=NpEncoder)
+        json.dump(data, history_dest, cls=NumpyEncoder)
 
 
 if __name__ == '__main__':
@@ -119,7 +119,7 @@ if __name__ == '__main__':
     parser.add_argument('--model', type=str, required=True,
                         help='Model to be used.')
     parser.add_argument('--patch-size', type=int, nargs='+', required=True,
-                        metavar='width height bands',
+                        metavar='width height',
                         help='Size of the output input tensor.')
     parser.add_argument('--epochs', type=int, default=10,
                         help='Number of epochs'
