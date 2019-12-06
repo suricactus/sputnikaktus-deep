@@ -1,5 +1,6 @@
 import json
-from typing import (Union, Tuple, List, Iterable, Iterator)
+from typing import (Any, Union, Tuple, List, Iterable, Iterator)
+import importlib
 import os
 from glob import glob
 from itertools import product
@@ -16,6 +17,7 @@ from skimage import exposure
 
 ImageSize = Tuple[int, int]
 PatchSize = Union[int, Tuple[int], Tuple[int, int]]
+OverlapSize = Union[int, Tuple[int], Tuple[int, int], Tuple[int, int, int, int]]
 ClipExtremes = Union[int, Tuple[int, int]]
 
 
@@ -49,6 +51,13 @@ def hist_stretch_raster(img, bands: Iterable = None, clip_extremes: ClipExtremes
 
 def hist_stretch_image(img, bands: Iterable = None, clip_extremes: ClipExtremes = (2.5, 97.5)):
     """General purpose histogram stretching."""
+    if len(img.shape) == 2:
+        img = np.expand_dims(img, axis=2)
+
+    print('shape', img.shape)
+
+    assert len(img.shape) == 3, '(w, h, bands) image'
+
     _, _, total_bands = img.shape
 
     if bands is None:
@@ -66,6 +75,8 @@ def hist_stretch_image(img, bands: Iterable = None, clip_extremes: ClipExtremes 
             arr, in_range=(percentile_min, percentile_max))
 
         stretched[:, :, index] = band_stretched
+
+    stretched = np.squeeze(stretched)
 
     return stretched
 
@@ -86,7 +97,7 @@ def normalize_patch_size(patch_size: PatchSize) -> Tuple[int, int]:
     return patch_size
 
 
-def normalize_overlap_size(overlap_size: PatchSize) -> Tuple[int, int]:
+def normalize_overlap_size(overlap_size: OverlapSize) -> Tuple[int, int, int, int]:
     if isinstance(overlap_size, int):
         overlap_size = (overlap_size, overlap_size, overlap_size, overlap_size)
 
@@ -352,6 +363,15 @@ def get_buffered_patch2(
 
         yield reshape_as_image(padded_patch), offset_col, offset_row
 
+
+# TODO actually returns Module class
+def load_module(model_path: str) -> Any:
+    spec = importlib.util.spec_from_file_location(
+            'model_module', model_path)
+    model_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(model_module)
+
+    return model_module
 
 # got it from https://stackoverflow.com/a/57915246
 class NumpyEncoder(json.JSONEncoder):

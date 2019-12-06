@@ -9,7 +9,7 @@ def get_model(
     patch_size: Tuple[int, int],
     bands: Iterable[int],
     classes: int,
-    learning_rate: float
+    learning_rate: float = 0.1
 ) -> Model:
     img_w, img_h = patch_size
     input_shape = (img_w, img_h, len(bands))

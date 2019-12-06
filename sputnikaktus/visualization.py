@@ -75,8 +75,8 @@ def visualize_label(
     iplt = plt.imshow(img)
 
     if legend:
-        assert len(legend) >= len(
-            values), 'Legend items should not be less than values'
+        assert len(legend) >= len(values), \
+            'Legend items should not be less than values'
 
         # get the colors of the values, according to the colormap used by imshow
         colors = [iplt.cmap(iplt.norm(value)) for value in values]
