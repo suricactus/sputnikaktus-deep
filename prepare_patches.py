@@ -44,8 +44,7 @@ def write_tiles(
   files = get_filtered_files(source, filter)
 
   if len(files) == 0:
-    print('no files match the provided filter "{}", exiting...'.format(str(filter)))
-    exit(1)
+    raise Exception('no files match the provided filter "{}", exiting...'.format(str(filter)))
 
   if overwrite:
     if os.path.exists(destination):

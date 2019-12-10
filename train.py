@@ -10,8 +10,24 @@ import importlib.util
 
 import numpy as np
 from sputnikaktus.utils import (PatchSize, NumpyEncoder, normalize_patch_size,
-                   to_categorical_binary, fetch_images)
-from sputnikaktus.visualization import (visualize_pairs)
+                                to_categorical_binary, fetch_images, load_module)
+from sputnikaktus.visualization import (visualize_pairs, show_history)
+
+def preprocess(images: np.array, labels: np.array):
+    labels[labels != 1] = 2
+    labels = labels - 1
+
+    return images, labels
+
+
+def preprocess_wrapper(images: np.array, labels: np.array, classes: int):
+    images, labels = preprocess(images, labels)
+
+    assert len(np.unique(labels)) == classes, 'The number of unique values in the labels should match exactly the number of classes'
+    assert np.min(labels) == 0, 'The values in labels should start from 0'
+    assert np.max(labels) == classes - 1, 'The values in labels should not exceed the classes'
+
+    return images, labels
 
 
 def train_model(
@@ -39,9 +55,7 @@ def train_model(
     assert classes > 0
     assert os.path.exists(model)
 
-    spec = importlib.util.spec_from_file_location('model_module', model_path)
-    model_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(model_module)
+    model_module = load_module(model_path)
 
     model = model_module.get_model(
         patch_size,
@@ -60,8 +74,18 @@ def train_model(
         model.load_weights(weights)
 
     images_path_training, labels_path_training = training
-    images_training = fetch_images(images_path_training, patch_size, bands=bands)
-    labels_training = fetch_images(labels_path_training, patch_size, bands=(1,))
+    images_training = fetch_images(images_path_training, patch_size, bands=bands, dtype=np.float32)
+    labels_training = fetch_images(labels_path_training, patch_size, bands=(1,), dtype=np.int8)
+    images_training, labels_training = preprocess_wrapper(images_training, labels_training, classes)
+
+    validation_data = None
+    if validation:
+        images_path_validation, labels_path_validation = validation
+        images_validation = fetch_images(images_path_validation, patch_size, bands=bands, dtype=np.float32)
+        labels_validation = fetch_images(labels_path_validation, patch_size, bands=(1,), dtype=np.int8)
+        images_validation, labels_validation = preprocess_wrapper(images_validation, labels_validation, classes)
+        labels_validation = to_categorical_binary(labels_validation, classes)
+        validation_data = (images_validation, labels_validation)
 
     if interactive:
         visualize_pairs(
@@ -81,10 +105,12 @@ def train_model(
         epochs=epochs,
         batch_size=batch_size,
         verbose=2,
+        validation_data=validation_data
     )
 
     weights_filename = os.path.join('experiment', name, 'model.h5')
     history_filename = os.path.join('experiment', name, 'history.json')
+    history_plot_filename = os.path.join('experiment', name, 'history.png')
 
     os.makedirs(os.path.join('experiment', name), exist_ok=True)
 
@@ -93,11 +119,18 @@ def train_model(
     model.save(weights_filename)
 
     print('Saving history to "{}"...'.format(history_filename))
+    print('Saving history to "{}"...'.format(history_plot_filename))
 
     with open(history_filename, 'w') as history_dest:
         data = vars(history)
         del data['model']
         json.dump(data, history_dest, cls=NumpyEncoder)
+
+    plt = show_history(name, history.history, history.params)
+    plt.savefig(history_plot_filename)
+
+    if interactive:
+        plt.show()
 
 
 if __name__ == '__main__':

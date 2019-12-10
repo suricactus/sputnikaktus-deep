@@ -17,17 +17,31 @@ FigSplt = Tuple[Figure, Subplot]
 Legend = Iterable[str]
 
 
-def show_history(name: str, history: Dict) -> None:
+def show_history(name: str, history: Dict, params: Dict = None) -> None:
     epochs = len(history['loss'])
 
     fig, ax1 = plt.subplots()
+    plt.suptitle('Loss and accuracy for {}'.format(name), y=1)
+
+    if params:
+        descr = 'trained on {samples} samples with batch size of {batch_size} for {epochs} epochs'.format(**params)
+        ax1.set_title(descr, fontsize=10, y=1)
 
     color = 'tab:red'
-    ax1.set_title('Loss and accuracy for {}'.format(name))
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss', color=color)
     ax1.set_xticks(range(epochs))
-    ax1.plot(history['loss'], color=color)
+
+    legend_handles = []
+    
+    if 'loss' in history:
+        l1 = ax1.plot(history['loss'], color=color, label='Loss')
+        legend_handles += l1
+    
+    if 'val_loss' in history:
+        l2 = ax1.plot(history['val_loss'], color=color, linestyle='--', label='Validation loss')
+        legend_handles += l2
+
     ax1.tick_params(axis='y', labelcolor=color)
 
     # instantiate a second axes that shares the same x-axis
@@ -36,8 +50,19 @@ def show_history(name: str, history: Dict) -> None:
     color = 'tab:blue'
     # we already handled the x-label with ax1
     ax2.set_ylabel('Accuracy (%)', color=color)
-    ax2.plot(history['accuracy'], color=color)
+    
+    if 'accuracy' in history:
+        l3 = ax2.plot(history['accuracy'], color=color, label='Accuracy')
+        legend_handles += l3
+
+    if 'val_accuracy' in history:
+        l4 = ax2.plot(history['val_accuracy'], color=color, linestyle='--', label='Validation accuracy')
+        legend_handles += l4
+        
     ax2.tick_params(axis='y', labelcolor=color)
+
+    plt.legend(handles=legend_handles, loc='upper center', bbox_to_anchor=(0.5, -0.1),
+               fancybox=True, shadow=True, ncol=4)
 
     # otherwise the right y-label is slightly clipped
     fig.tight_layout()
@@ -72,7 +97,7 @@ def visualize_label(
     fig, splt = get_fig_splt(figsplt)
 
     splt.set_title(title)
-    iplt = plt.imshow(img)
+    iplt = plt.imshow(np.squeeze(img))
 
     if legend:
         assert len(legend) >= len(values), \
@@ -102,7 +127,7 @@ def visualize_image(
 ):
     """Visualize the satellite image data."""
     assert len(rgb) == 3, 'Exactly three bands should be passed as rgb'
-    assert img.dtype == np.uint8 or img.dtype == np.float32, 'RGB images can be only certain types in matplotlib'
+    assert img.dtype in (np.uint8, np.float32, np.float64), 'RGB images can be only certain types in matplotlib'
 
     if as_image:
         img = reshape_as_image(img)
@@ -219,7 +244,3 @@ def visualize_pairs(
                    title=title, title_raw=title_raw, title_lbl=title_lbl, figsplt=(fig, splt))
 
     plt.show()
-
-
-history = {'loss': [1.1727547984064361, 0.8204017723048175,
-                    0.8189218073715399], 'accuracy': [0.8770104, 0.9415306, 0.9437733]}

@@ -15,6 +15,7 @@ from rasterio.plot import (reshape_as_image)
 from rasterio.io import DatasetWriter
 from skimage import exposure
 
+FilePath = str
 ImageSize = Tuple[int, int]
 PatchSize = Union[int, Tuple[int], Tuple[int, int]]
 OverlapSize = Union[int, Tuple[int], Tuple[int, int], Tuple[int, int, int, int]]
@@ -200,14 +201,15 @@ def fetch_images(
     filter: List[str] = ('*.tif', '*.tiff'),
     as_image: bool = True,
     patch_residue: str = None,
-    out_dtype: np.dtype = np.uint8
+    dtype: np.dtype = None
 ):
+    assert dtype, 'Missing output datatype'
+
     patch_w, patch_height = normalize_patch_size(patch_size)
     files = get_filtered_files(path, filter)
 
     if len(files) == 0:
-        print('no files match the provided filter "{}", exiting...'.format(str(filter)))
-        exit(1)
+        raise Exception('no files match the provided filter "{}", exiting...'.format(str(filter)))
 
     patches_count = 0
 
@@ -220,7 +222,7 @@ def fetch_images(
             patches_count += len(list(offsets))
 
     # build the final result with the proper shape, so to prevent wasteful memory copies
-    tiles = np.zeros(shape=(patches_count, patch_w, patch_height, len(bands)))
+    tiles = np.zeros(shape=(patches_count, patch_w, patch_height, len(bands)), dtype=dtype)
     index = 0
 
     for filename in files:
@@ -229,7 +231,7 @@ def fetch_images(
             img_size = (img_src.meta['width'], img_src.meta['height'])
             for window in get_patch_windows(img_size, patch_size, patch_residue):
                 img = img_src.read(
-                    indexes=bands, window=window, out_dtype=out_dtype)
+                    indexes=bands, window=window, out_dtype=dtype)
 
                 if np.ndim(img) == 2:
                     img = np.expand_dims(img, axis=0)
